@@ -64,6 +64,7 @@ from basin3d.plugins import usgs_huc_codes
 
 logger = monitor.get_logger(__name__)
 
+# TODO: Transform Layer (Statistics)
 URL_USGS_HUC = "https://water.usgs.gov/GIS/new_huc_rdb.txt"
 USGS_STATISTIC_MAP: Dict = {
     MeasurementMetadataMixin.STATISTIC_MEAN: '00003',
@@ -72,6 +73,7 @@ USGS_STATISTIC_MAP: Dict = {
 }
 
 
+# TODO: Transform Layer (Units)
 def convert_discharge(data, parameter, units):
     """
     Convert the River Discharge to m^3
@@ -87,14 +89,14 @@ def convert_discharge(data, parameter, units):
         units = "m^3/s"
     return data, units
 
-
+# TODO: Transform Layer (Statistics)
 def map_statistic_code(stat_cd):
     for k, v in USGS_STATISTIC_MAP.items():
         if stat_cd == v:
             return k
     return 'NOT SUPPORTED'  # consider making this part of the Mixin Statistic type
 
-
+# TODO: Access Layer, 
 def generator_usgs_measurement_timeseries_tvp_observation(view,
                                                           query: QueryMeasurementTimeseriesTVP,
                                                           synthesis_messages):
@@ -113,9 +115,10 @@ def generator_usgs_measurement_timeseries_tvp_observation(view,
         objects
     """
 
+    # TODO: Access? or something else  (Query Building) 
     # Temporal resolution is always daily.
     search_params: List[Tuple[str, Any]] = list()
-
+        
     search_params.append(("startDT", query.start_date))
 
     if query.end_date:
@@ -123,9 +126,11 @@ def generator_usgs_measurement_timeseries_tvp_observation(view,
 
     search_params.append(("parameterCd", ",".join([str(o) for o in query.observed_property_variables])))
 
+   
     if query.statistic:
         statistics: List[str] = []
         for stat in query.statistic:
+            # TODO: Transform Layer
             sythesized_stat = USGS_STATISTIC_MAP.get(stat)
             if not sythesized_stat:
                 synthesis_messages.append(f"USGS Daily Values service does not support statistic {stat}")
@@ -149,6 +154,7 @@ def generator_usgs_measurement_timeseries_tvp_observation(view,
     # JSON format
     search_params.append(("format", "json"))
 
+    # TODO: Access
     # Request the data points
     response = get_url('{}dv'.format(view.datasource.location),
                        params=search_params)
@@ -201,7 +207,7 @@ def iter_rdb_to_json(rdb_text):
                 json_object = dict(zip(header, data))
                 yield json_object
 
-
+# TODO: Transform/Harmonize Layer
 def _load_point_obj(datasource, json_obj, feature_observed_properties, synthesis_messages,
                     observed_property_variables=None):
     """
@@ -279,7 +285,7 @@ def _load_point_obj(datasource, json_obj, feature_observed_properties, synthesis
 
         return monitoring_feature
 
-
+# TODO: Rename and add a MF class that sets the model
 class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
     """
     Access for mapping USGS HUC Regions, SubRegions and Accounting Units to
@@ -310,6 +316,7 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
         """
         synthesis_messages: List[str] = []
 
+        # TODO: Access (Query building and endpoint logic)
         feature_type = isinstance(query.feature_type, FeatureTypeEnum) and query.feature_type.value or query.feature_type
         if feature_type in USGSDataSourcePlugin.feature_types or feature_type is None:
 
@@ -325,33 +332,39 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
                     elif len(value) == 8:
                         usgs_subbasins.append(value)
 
+            # TODO: Access (Query building and endpoint logic)
             if not feature_type or feature_type != FeatureTypeEnum.POINT:
 
+                # TODO: Access
                 huc_text = self.get_hydrological_unit_codes(synthesis_messages=synthesis_messages)
                 logger.debug(f"{self.__class__.__name__}.list url:{URL_USGS_HUC}")
 
                 for json_obj in [o for o in iter_rdb_to_json(huc_text) if not parent_features or [p for p in parent_features if o["huc"].startswith(p)]]:
 
+                    
                     monitoring_feature = None
+                    # TODO: Transform/Harmonize Layer
                     if (feature_type is None or feature_type == FeatureTypeEnum.REGION) and len(json_obj["huc"]) < 4:
                         monitoring_feature = self._load_huc_obj(json_obj, feature_type=FeatureTypeEnum.REGION)
 
+                    # TODO: Transform/Harmonize Layer
                     elif (feature_type is None or feature_type == FeatureTypeEnum.SUBREGION) and len(json_obj["huc"]) == 4:
                         monitoring_feature = self._load_huc_obj(json_obj, feature_type=FeatureTypeEnum.SUBREGION,
                                                                 related_sampling_feature=json_obj["huc"][0:2],
                                                                 related_sampling_feature_type=FeatureTypeEnum.REGION)
-
+                    # TODO: Transform/Harmonize Layer
                     elif (feature_type is None or feature_type == FeatureTypeEnum.BASIN) and len(json_obj["huc"]) == 6:
                         monitoring_feature = self._load_huc_obj(json_obj, feature_type=FeatureTypeEnum.BASIN,
                                                                 related_sampling_feature=json_obj["huc"][0:4],
                                                                 related_sampling_feature_type=FeatureTypeEnum.SUBREGION)
-
+                    # TODO: Transform/Harmonize Layer
                     elif (feature_type is None or feature_type == FeatureTypeEnum.SUBBASIN) and len(json_obj["huc"]) == 8:
                         hucs = {json_obj["huc"][0:i] for i in range(2, 8, 2)}
 
-                        # Filter by regions if it is set
+                        # TODO: Access (Filter by regions if it is set)
                         if not usgs_regions or not hucs.isdisjoint(usgs_regions):
 
+                            # TODO: Transform/Harmonize Layer
                             # This is a Cataloging Unit (See https://water.usgs.gov/GIS/huc_name.html)
                             monitoring_feature = self._load_huc_obj(
                                 json_obj=json_obj, feature_type=FeatureTypeEnum.SUBBASIN,
@@ -363,15 +376,19 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
                     else:
                         logger.debug("Ignoring HUC {}".format(json_obj["huc"]))
 
+                    
                     # Determine whether to yield the monitoring feature object
                     if monitoring_feature:
+                         # TODO: Access (Filter)
                         if query.monitoring_features and json_obj['huc'] in query.monitoring_features:
                             yield monitoring_feature
                         elif not query.monitoring_features:
                             yield monitoring_feature
 
+            # TODO: Access (Query building and endpoint logic)
             # points: USGS calls these sites
             else:
+                # TODO: Access (Query building and endpoint logic)
                 if query.monitoring_features:
                     usgs_sites = ",".join(query.monitoring_features)
                     feature_observed_properties = self.get_observed_properties_variables(query.monitoring_features)
@@ -382,6 +399,7 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
 
                 # Filter by locations with data
                 url = '{}site/?sites={}'.format(self.datasource.location, usgs_sites)
+                # TODO: Access 
                 usgs_site_response = get_url(url)
                 logger.debug(f"{self.__class__.__name__}.list url:{url}")
 
@@ -398,6 +416,7 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
         return StopIteration(synthesis_messages)
 
 
+    # TODO: Access
     def get_hydrological_unit_codes(self, synthesis_messages):
         """Get the hydrological unit codes for USGS"""
 
@@ -416,6 +435,7 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
 
         return usgs_huc_codes.CONTENT
 
+    # TODO: REMOVE - not need for a get single (specialized query that adds no value)
     def get(self, query: QueryById):
         """ Get a single Region object
 
@@ -431,6 +451,7 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
         :return: a serialized ``MonitoringFeature`` object
         """
 
+        
         if len(query.id) == 2:
             mf_query = QueryMonitoringFeature(monitoring_features=[query.id], feature_type=FeatureTypeEnum.REGION)
         elif len(query.id) == 4:
@@ -452,6 +473,7 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
                 return o
         return None
 
+    # TODO: Transform/Harmonize Layer
     def _load_huc_obj(self, json_obj, feature_type, description=None,
                       related_sampling_feature=None, related_sampling_feature_type=None):
         """
@@ -493,6 +515,7 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
                 observed_property_variables=None)
         return result
 
+    #TODO: overriding the wrong function.
     def get_observed_properties_variables(self, usgs_sites):
         """
         Get a dictionary of location variables for the given location results
@@ -500,13 +523,16 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
         :return:
         """
 
+        # TODO: Access
         # Gather the location ids and get the parameters available
         # Only search for the mean data statCd=00003.
         url = '{}dv?huc={}&format=json&statCd=00003'.format(self.datasource.location, ",".join(usgs_sites))
         response_variables = get_url(url)
         observed_properties_variables = {}
         if response_variables and response_variables.status_code == 200:
-            for location in response_variables.json()['value']['timeSeries']:
+            for location_json in response_variables.json():
+                # TODO: Transform/Harmonize Layer
+                location = location_json['value']['timeSeries']
                 _, location_id, parameter, statistic = location['name'].split(":")
                 # We only want the mean
                 observed_properties_variables.setdefault(location_id, [])
@@ -514,7 +540,7 @@ class USGSMonitoringFeatureAccess(DataSourcePluginAccess):
             logger.debug("Location DataTypes: {}".format(observed_properties_variables))
         return observed_properties_variables
 
-
+# TODO: Rename and add a MTTVP class that sets the model
 class USGSMeasurementTimeseriesTVPObservationAccess(DataSourcePluginAccess):
     """
     https://waterservices.usgs.gov/rest/DV-Service.html
@@ -531,6 +557,7 @@ class USGSMeasurementTimeseriesTVPObservationAccess(DataSourcePluginAccess):
 
     synthesis_model_class = MeasurementTimeseriesTVPObservation
 
+    # TODO: Transform/Harmonize
     def result_quality(self, qualifiers):
         """
         Daily Value Qualification Code (dv_rmk_cd)
@@ -559,7 +586,8 @@ class USGSMeasurementTimeseriesTVPObservationAccess(DataSourcePluginAccess):
             return ResultQualityEnum.UNCHECKED
         else:
             return 'NOT_SET'
-
+    
+    # TODO: Transform/Harmonize
     def get_result_qualifiers(self, qualifiers):
         timeseries_qualifiers = set()
         for qualifier in qualifiers:
@@ -580,17 +608,20 @@ class USGSMeasurementTimeseriesTVPObservationAccess(DataSourcePluginAccess):
             objects
         """
         synthesis_messages = []
+        # TODO: Access (Query building and endpoint logic)
         feature_obj_dict = {}
         if not query.monitoring_features:
             return None
 
         search_params = ",".join(query.monitoring_features)
 
+        
         url = '{}site/?sites={}'.format(self.datasource.location, search_params)
 
         if len(search_params) < 3:
             url = '{}site/?huc={}'.format(self.datasource.location, search_params)
 
+        # TODO: Access (Duplicated code from MF above) 
         usgs_site_response = None
         try:
             usgs_site_response = get_url(url)
@@ -601,11 +632,14 @@ class USGSMeasurementTimeseriesTVPObservationAccess(DataSourcePluginAccess):
 
         if usgs_site_response:
             for v in iter_rdb_to_json(usgs_site_response.text):
+                # TODO: Transform/Harmonize
                 if v["site_no"]:
                     feature_obj_dict[v["site_no"]] = v
 
+        # TODO: Access
         # Iterate over data objects returned
         for data_json in generator_usgs_measurement_timeseries_tvp_observation(self, query, synthesis_messages):
+            # TODO: Transform/Harmonize
             unit_of_measurement = data_json["variable"]["unit"]['unitCode']
             timezone_offset = data_json["sourceInfo"]["timeZoneInfo"]["defaultTimeZone"]["zoneOffset"]
 
@@ -633,6 +667,7 @@ class USGSMeasurementTimeseriesTVPObservationAccess(DataSourcePluginAccess):
             result_qualifiers = set()
 
             for values in data_json["values"]:
+                # TODO: Transform/Harmonize
                 result_qualifiers.update(self.get_result_qualifiers(values["qualifier"]))
 
                 for value in values["value"]:
